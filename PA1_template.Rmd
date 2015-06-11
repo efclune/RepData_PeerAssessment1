@@ -1,25 +1,158 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
+Ed Clune
+6/11/2015
 
+## Introduction
+This is the document I generated to complete Project Assignment 1 for the Reproducible Research online class.  It requires a file  with the name activity.csv be placed in the same directory as the original PA1_template.Rmd file in order to generate the correct HTML or PDF File.
+
+The rest of this document includes a section for initial read-in and manipulation of the data for later sections.  The following sections each answer a specific question.  Finally, there is a conclusion section to wrap up the analysis.
 
 ## Loading and preprocessing the data
+First, the data must be read in.  Since the file is in csv format, it is very easy to read in the data.  The data is a recording of footstep count for an individual (I believe it is one individual) in 5 minute intervals.  The data contains three columns of information:
+
+* step - the steps taken in the interval
+* date - the date the data was recorded
+* interval - the start minute of the 5 minute interval
+
+It should be noted that the interval value is not just a count of minutes.  The hundreds and thousand digits are actually hours.  Thus the interval value representing 3:50 AM is 350 (not 230).  There are 288 intervals in a day.  Given the total number of records(17,568), if the record set covers complete days (it does), then the records cover 61 days.  This is relevent later on.
+
+The data is read into a variable named activity.
+```{R readin, echo=TRUE}
+activity<-read.csv("activity.csv")
+summary(activity)
+```
+Looking at the summary, notice that the steps data includes many NA values (at the bottom of the steps column is a count of "NA's").  Further investigation (not discussed here) showed that data was missing for complete days (288 record blocks) and not randomly scattered throughout the dataset.  To provide a "clean" dataset, I created the variable activitycl which removed all entries with NA values, effectively removing a few days (8 total) from the first part of the analysis (before imputation).
+```{R clean1, echo=TRUE}
+activitycl<-activity[!is.na(activity$steps),]
+
+```
+With this done, the first group of questions can be answered.
+
+## Q1: What is mean total number of steps taken per day?
+This question simply requires summing up the total steps for each day and then finding the mean.  In R this can easily be done usng the *by* function, as shown below.
+```{R dailysteps, echo=TRUE}
+daytotal<-with(activitycl,by(activitycl,date, function(x) sum(x$steps)))
+hist(daytotal, main="Figure 1: Histogram of Total Steps per Day",
+     breaks=10,xlab="Total Steps")
+```
+The histogram shows a spread of the step counts for each day.  From this it is expected that the mean will be somewhat north of 10,000 steps per day.
+
+```{R dailymean, echo=TRUE}
+summary(daytotal)
+mean(daytotal,na.rm=TRUE)
+```
+The summary shows a median of 10,760 or more accurately **1.076x10^4**, meaning that the percision is only to the 10s digit in the summary.  The mean, however, can be calculated directly as **10766.19** by averaging all of the daily totals. 
+
+## Q2: What is the average daily activity pattern?
+I interpret this question to ask for the average number of steps taken in every 5-minute slice of time.  In other words, for each time slide you want the average of steps over all days for which you have data.  Again, you need to know that, for each day for which there is data, you have data for all time slices (i.e. there are no random missing time slices).  This means you can add up the totals for each time slice and divide by the number of days (53 in this case), which is done below in R (along with some cleanup to get a clean data frame).
+```{R intervalaverage, echo=TRUE}
+numdays<-length(unique(activitycl$date))
+timeav<-with(activitycl,
+                by(activitycl,interval,function(x) sum(x$steps)/numdays))
+avday<-as.data.frame(cbind(as.numeric(names(timeav)),as.numeric(timeav)))
+names(avday)<-c("interval","steps")
+```
+Once we have the data, it is most appropriate to display this as a timeline of activity (i.e. interval along the X-axis and averages steps along the Y-axis)
+```{R intervalavgplot, echo=TRUE}
+plot(avday$interval,avday$steps,type="l", main="Figure 2: Footsteps during the Day (5 Minute Intervals)",xlab="Interval: HHMM", ylab="Steps")
+```
+
+For this individual, an average day starts around 5 AM (about 50 steps per interval), with peak steps occurring around 9 AM (200 steps per interval) and then fluctuating between about 40 and 100 steps per interval until around 7 PM and slowly tapering down to near zero by midnight.  Although the 9 AM spike represents a large amount of movement, it's not clear that this represents "going to work".  This is for two reasons.  First, there isn't a comparable spike at the end of the typical (or even extended) work day.  Second, if the data is taken in the US (not really stated) most people drive to work.  I see two possibilities.  First, the spike represents an exercise period before heading to work, or the person walks, bikes or takes a lot of trains to work but gets a ride back home.  This theorizing isn't directly related to the question, and can't be proven one way or another, but I thought it was interesting to try to explain the data.
+The time slice with the most activity is the interval at **8:35 AM** (i.e. between 8:35 and 8:40 AM) with an average number of **206.2 steps** in 5 minutes (as shown by the R code and output below).
+
+```{R maxinterval, echo=TRUE}
+avday[avday$steps==max(avday$steps),]
+```
+
+## Q3:Imputing missing values
+As stated above, all missing values consist of missing days, meaning all of the intervals for certain days have steps value of NA for all intervals.  The simplest method of imputing these values is to take the recently computed average time for each interval and use that value in place of the missing value.
+This was not as easy as I first thought it would be and ended up with a functional but inelligent solution.  Basically, I created a vector by replicating the average day vector 61 times, which was number of days of the original data collection.  A new copy of the activity variable (activity2) as created and the new vector was tacked on as an additional column (named avsteps).  With this structure, I could test the value of steps in every record and, if the value was NA, just replace it with the value of avsteps in the same record/row.  After this was done, the avsteps column was stripped out of the data frame.  The result was a full data set (all 61 days) with no NA values.
+
+```{R imputation, echo=TRUE}
+activity2<-activity
+activity2$avsteps<-rep(avday$steps,length.out=17568)
+activity2$steps<-ifelse(is.na(activity2$steps),
+                        activity2$avsteps,
+                        activity2$steps)
+activity$avsteps<-NULL
+```
+With the cleaned data set, we can look at the new histogram of daily activity.
+```{R daysteps2, echo=TRUE}
+daytotal2<-with(activity2,by(activity2,date, function(x) sum(x$steps)))
+hist(daytotal2, main="Figure 3: Histogram of Total Steps per Day (Imputed)",
+     breaks=10,xlab="Total Steps")
+```
+
+The results look very similar to the previous histogram, with perhaps the center bin being taller (the scale changed between the two histograms).  This isn't surprising since the imputed data (accounting for 8 days) will just lead to the average number of steps per day.
+```{R}
+summary(daytotal2)
+mean(daytotal2,na.rm=TRUE)
+
+```
+Again, not surprisingly, the mean is exactly the same as before.  However, the median has moved to be equal to the mean (to 10s resolution), due to the addition of 8 new values (compared to the previous histogram) exactly at the mean.
+
+## Q4: Are there differences in activity patterns between weekdays and weekends?
+To answer this question the data needs to be separated into weekday and weekend data.  This is done, first by generating a factor with those to values that are assigned to each record based on the date.  Fortunately, dates in R can easily be converted or queried to provide the day of the week and that provides an easy way to label a date as either weekday or weekend.
+
+```{R weekendflag, echo=TRUE}
+activity2$date<-as.POSIXct(activity2$date)
+activity2$day<-ifelse(grepl("Sat|Sun",format(activity2$date,"%a")),
+                     "weekend","weekday")
+activity2$day<-as.factor(activity2$day)
+```
+After this, I chose to split the full dataset into two separate date sets based on the factor.  There are other ways to handle this for reporting and displays, but with just two cases to worry about, this was very easy.
+```{R splitdata, echo=TRUE}
+actwkday<-activity2[activity2$day=="weekday",]
+actwkend<-activity2[activity2$day=="weekend",]
+```
+For each case (weekday and weekend) I also needed the number of days in each data frame.
+
+```{R splitcounts, echo=TRUE}
+numwkday<-length(unique(actwkday$date))
+numwkend<-length(unique(actwkend$date))
+numwkday
+numwkend
+```
+For this data there are 45 weekdays and 16 weekend days.  With this information we can generate "average" day coints for each interval in each data set, the same as we did above.
+
+```{R intervalaverage2, echo=TRUE}
+avday$wkdaystep<-as.numeric(with(actwkday,by(actwkday,interval,
+                            function(x) sum(x$steps)/numwkday)))
+avday$wkendstep<-as.numeric(with(actwkend,by(actwkend,interval,
+                            function(x) sum(x$steps)/numwkend)))
+```
+Finally, this data can be graphed, the same as before to look for similarities and differences.
+
+plot(avday$interval,avday$steps,type="l", main="Figure 2: Footsteps during the Day (5 Minute Intervals)",xlab="Interval: HHMM", ylab="Steps")
+
+```{R intervalgraphs, echo=TRUE}
+par(mfrow=c(2,1))
+par(mar=c(2,2.5,1,0.5))
+par(oma=c(1,1,1,0))
+par(cex.main=0.75)
+par(cex.axis=0.75)
+plot(avday$interval,avday$wkendstep, type="l", main="Weekend",ylab="",
+     xlab="",ylim=c(0,200))
+box(which="figure", col="black")
+mtext("Figure 4: Steps vs. Time",side=3, outer=TRUE)
+mtext("Steps", side=2, outer=TRUE)
+plot(avday$interval,avday$wkdaystep, type="l", main="Weekday",
+     ylab="",xlab="",ylim=c(0,200))
+mtext("Time", side=1, outer=TRUE)
+box(which="figure", col="black")
+```
+
+There are significant differences between the weekday and weekend activity.  The spike in the previous overall activity plot is solely in the weekday activity graph and the somewhat cyclical other activity later in the day is predominantly in the weekend graph, with a lesser initial spike, but several other spikes throughout the day of nearly comparable activity.  What can be said is that weekend activity (steps) are much more spread out indicating a fairly active weekend whereas the weekday has an early spike of activity but generally settles down to a much lower (but not zero) activity level.
 
 
+##Concluding Remarks
+This report has taken an interesting data set and shown some properties of that data, such as the mean of the steps per day.  Because there was some missing data, we inserted values in place of the missing values, using a simple mean for each missing interval (based on similar intervals).  Even with missing data, it was very well behaved which allowed for relatively simple methods of imputing the data.  The one thing that might be done differently is to separate the weekend missing days from the weekday missing days and use the averages for those separate cases to replace missing values.  The only risk with doing this is that,particularly for the weekend data, fewer days are being used in generating averages, so unusual values during single days would have more impact on the average.
+The results are not very surprising, which is good.  With more information about the subjects behavior (e.g. whether they exercised in the morning, how they got to and from work and what their activities during the day and night typically are), different peaks, valleys and cycles can probably be explained.
+With the data we have, there are some interesting results to be found, but practical application requires more information tying the data to actual activities.
 
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
