@@ -20,7 +20,7 @@ First, the data must be read in.  Since the file is in csv format, it is very ea
 * date - the date the data was recorded
 * interval - the start minute of the 5 minute interval
 
-It should be noted that the interval value is not just a count of minutes.  The hundreds and thousand digits are actually hours.  Thus the interval value representing 3:50 AM is 350 (not 230).  There are 288 intervals in a day.  Given the total number of records(17,568), if the record set covers complete days (it does), then the records cover 61 days.  This is relevent later on.
+It should be noted that the interval value is not just a count of minutes.  The hundreds and thousand digits are actually hours.  Thus the interval value representing 3:50 AM is 350 (not 230).  There are 288 intervals in a day.  Given the total number of records (17,568), if the record set covers complete days (it does), then the records cover 61 days.  This is relevant later on.
 
 The data is read into a variable named activity.
 ```{R readin, echo=TRUE}
@@ -40,14 +40,16 @@ This question simply requires summing up the total steps for each day and then f
 daytotal<-with(activitycl,by(activitycl,date, function(x) sum(x$steps)))
 hist(daytotal, main="Figure 1: Histogram of Total Steps per Day",
      breaks=10,xlab="Total Steps")
+box(which="plot", col="black")
 ```
+
 The histogram shows a spread of the step counts for each day.  From this it is expected that the mean will be somewhat north of 10,000 steps per day.
 
 ```{R dailymean, echo=TRUE}
 summary(daytotal)
 mean(daytotal,na.rm=TRUE)
 ```
-The summary shows a median of 10,760 or more accurately **1.076x10^4**, meaning that the percision is only to the 10s digit in the summary.  The mean, however, can be calculated directly as **10766.19** by averaging all of the daily totals. 
+The summary shows a median of 10,760 or more accurately **1.076x10^4**, meaning that the precision is only to the 10s digit in the summary.  The mean, however, can be calculated directly as **10766.19** by averaging all of the daily totals. 
 
 ## Q2: What is the average daily activity pattern?
 I interpret this question to ask for the average number of steps taken in every 5-minute slice of time.  In other words, for each time slide you want the average of steps over all days for which you have data.  Again, you need to know that, for each day for which there is data, you have data for all time slices (i.e. there are no random missing time slices).  This means you can add up the totals for each time slice and divide by the number of days (53 in this case), which is done below in R (along with some cleanup to get a clean data frame).
@@ -72,7 +74,7 @@ avday[avday$steps==max(avday$steps),]
 
 ## Q3:Imputing missing values
 As stated above, all missing values consist of missing days, meaning all of the intervals for certain days have steps value of NA for all intervals.  The simplest method of imputing these values is to take the recently computed average time for each interval and use that value in place of the missing value.
-This was not as easy as I first thought it would be and ended up with a functional but inelligent solution.  Basically, I created a vector by replicating the average day vector 61 times, which was number of days of the original data collection.  A new copy of the activity variable (activity2) as created and the new vector was tacked on as an additional column (named avsteps).  With this structure, I could test the value of steps in every record and, if the value was NA, just replace it with the value of avsteps in the same record/row.  After this was done, the avsteps column was stripped out of the data frame.  The result was a full data set (all 61 days) with no NA values.
+This was not as easy as I first thought it would be and ended up with a functional but inelegant solution.  Basically, I created a vector by replicating the average day vector 61 times, which was number of days of the original data collection.  A new copy of the activity variable (activity2) as created and the new vector was tacked on as an additional column (named avsteps).  With this structure, I could test the value of steps in every record and, if the value was NA, just replace it with the value of avsteps in the same record/row.  After this was done, the avsteps column was stripped out of the data frame.  The result was a full data set (all 61 days) with no NA values.
 
 ```{R imputation, echo=TRUE}
 activity2<-activity
@@ -87,6 +89,7 @@ With the cleaned data set, we can look at the new histogram of daily activity.
 daytotal2<-with(activity2,by(activity2,date, function(x) sum(x$steps)))
 hist(daytotal2, main="Figure 3: Histogram of Total Steps per Day (Imputed)",
      breaks=10,xlab="Total Steps")
+box(which="plot", col="black")
 ```
 
 The results look very similar to the previous histogram, with perhaps the center bin being taller (the scale changed between the two histograms).  This isn't surprising since the imputed data (accounting for 8 days) will just lead to the average number of steps per day.
@@ -119,7 +122,7 @@ numwkend<-length(unique(actwkend$date))
 numwkday
 numwkend
 ```
-For this data there are 45 weekdays and 16 weekend days.  With this information we can generate "average" day coints for each interval in each data set, the same as we did above.
+For this data there are 45 weekdays and 16 weekend days.  With this information we can generate "average" day counts for each interval in each data set, the same as we did above.
 
 ```{R intervalaverage2, echo=TRUE}
 avday$wkdaystep<-as.numeric(with(actwkday,by(actwkday,interval,
@@ -127,23 +130,22 @@ avday$wkdaystep<-as.numeric(with(actwkday,by(actwkday,interval,
 avday$wkendstep<-as.numeric(with(actwkend,by(actwkend,interval,
                             function(x) sum(x$steps)/numwkend)))
 ```
+
 Finally, this data can be graphed, the same as before to look for similarities and differences.
 
-plot(avday$interval,avday$steps,type="l", main="Figure 2: Footsteps during the Day (5 Minute Intervals)",xlab="Interval: HHMM", ylab="Steps")
-
-```{R intervalgraphs, echo=TRUE}
+```{R intervalgraphs, echo=TRUE, fig.height=6}
 par(mfrow=c(2,1))
 par(mar=c(2,2.5,1,0.5))
 par(oma=c(1,1,1,0))
 par(cex.main=0.75)
 par(cex.axis=0.75)
 plot(avday$interval,avday$wkendstep, type="l", main="Weekend",ylab="",
-     xlab="",ylim=c(0,200))
+     xlab="",ylim=c(0,225))
 box(which="figure", col="black")
 mtext("Figure 4: Steps vs. Time",side=3, outer=TRUE)
 mtext("Steps", side=2, outer=TRUE)
 plot(avday$interval,avday$wkdaystep, type="l", main="Weekday",
-     ylab="",xlab="",ylim=c(0,200))
+     ylab="",xlab="",ylim=c(0,225))
 mtext("Time", side=1, outer=TRUE)
 box(which="figure", col="black")
 ```
@@ -152,7 +154,7 @@ There are significant differences between the weekday and weekend activity.  The
 
 
 ##Concluding Remarks
-This report has taken an interesting data set and shown some properties of that data, such as the mean of the steps per day.  Because there was some missing data, we inserted values in place of the missing values, using a simple mean for each missing interval (based on similar intervals).  Even with missing data, it was very well behaved which allowed for relatively simple methods of imputing the data.  The one thing that might be done differently is to separate the weekend missing days from the weekday missing days and use the averages for those separate cases to replace missing values.  The only risk with doing this is that,particularly for the weekend data, fewer days are being used in generating averages, so unusual values during single days would have more impact on the average.
+This report has taken an interesting data set and shown some properties of that data, such as the mean of the steps per day.  Because there was some missing data, we inserted values in place of the missing values, using a simple mean for each missing interval (based on similar intervals).  Even with missing data, it was very well behaved which allowed for relatively simple methods of imputing the data.  The one thing that might be done differently is to separate the weekend missing days from the weekday missing days and use the averages for those separate cases to replace missing values.  The only risk with doing this is that, particularly for the weekend data, fewer days are being used in generating averages, so unusual values during single days would have more impact on the average.
 The results are not very surprising, which is good.  With more information about the subjects behavior (e.g. whether they exercised in the morning, how they got to and from work and what their activities during the day and night typically are), different peaks, valleys and cycles can probably be explained.
 With the data we have, there are some interesting results to be found, but practical application requires more information tying the data to actual activities.
 
